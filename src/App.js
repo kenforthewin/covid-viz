@@ -61,6 +61,13 @@ export default class App extends React.Component {
     });
   }
 
+  inputDebounce(sql, setUrl = false) {
+    clearTimeout(this.debounce);
+    this.debounce = setTimeout(() => {
+      this.exec(sql, setUrl);
+    }, 500);
+  }
+
   exec(sql, setUrl = false) {
     let results = null,
       err = null;
@@ -119,7 +126,7 @@ export default class App extends React.Component {
 
         <textarea
           defaultValue={parsed["q"]}
-          onChange={e => this.exec(e.target.value, true)}
+          onChange={e => this.inputDebounce(e.target.value, true)}
           placeholder="Enter some SQL. Try “SELECT * FROM covid_counties;”"
         ></textarea>
 
