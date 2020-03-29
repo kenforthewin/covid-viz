@@ -33,15 +33,24 @@ export default class App extends React.Component {
       "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"
     ).then(data => {
       let chunk = 100;
+      // data.forEach(d => {
+      //   let strValues = `("${d.date}","${d.county}","${d.state}",${d.fips},${d.cases},${d.deaths})`;
+      //   let q = `INSERT INTO covid_counties (date, county, state, fips, cases, deaths)\nVALUES\n${strValues};`;
+      //   this.exec(q);
+      // });
       for (let i = 0, j = data.length; i < j; i += chunk) {
         let values = data
           .slice(i, i + chunk)
           .map(
             d =>
-              `("${d.date}","${d.county}","${d.state}",${d.fips},${d.cases},${d.deaths})`
+              `("${d.date}","${d.county}","${d.state}",${d.fips || 0},${
+                d.cases
+              },${d.deaths})`
           );
+
         let strValues = values.join(",\n");
         let q = `INSERT INTO covid_counties (date, county, state, fips, cases, deaths)\nVALUES\n${strValues};`;
+        console.log(q);
         this.exec(q);
       }
       this.setState({ loading: false });
