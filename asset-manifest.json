@@ -1,0 +1,23 @@
+{
+  "files": {
+    "main.css": "/covid-viz/static/css/main.c500fa28.chunk.css",
+    "main.js": "/covid-viz/static/js/main.740cc2bc.chunk.js",
+    "main.js.map": "/covid-viz/static/js/main.740cc2bc.chunk.js.map",
+    "runtime-main.js": "/covid-viz/static/js/runtime-main.49596344.js",
+    "runtime-main.js.map": "/covid-viz/static/js/runtime-main.49596344.js.map",
+    "static/js/2.e67e56f4.chunk.js": "/covid-viz/static/js/2.e67e56f4.chunk.js",
+    "static/js/2.e67e56f4.chunk.js.map": "/covid-viz/static/js/2.e67e56f4.chunk.js.map",
+    "index.html": "/covid-viz/index.html",
+    "precache-manifest.4d8d3759fc4bf6c0143d4cbac55e8f36.js": "/covid-viz/precache-manifest.4d8d3759fc4bf6c0143d4cbac55e8f36.js",
+    "service-worker.js": "/covid-viz/service-worker.js",
+    "static/css/main.c500fa28.chunk.css.map": "/covid-viz/static/css/main.c500fa28.chunk.css.map",
+    "static/js/2.e67e56f4.chunk.js.LICENSE.txt": "/covid-viz/static/js/2.e67e56f4.chunk.js.LICENSE.txt",
+    "static/js/sql-wasm.wasm": "/covid-viz/static/js/sql-wasm.wasm"
+  },
+  "entrypoints": [
+    "static/js/runtime-main.49596344.js",
+    "static/js/2.e67e56f4.chunk.js",
+    "static/css/main.c500fa28.chunk.css",
+    "static/js/main.740cc2bc.chunk.js"
+  ]
+}
