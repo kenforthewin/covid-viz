@@ -10,7 +10,17 @@
   "main": "src/index.js",
   "license": "MIT",
   "dependencies": {
+    "@vx/axis": "0.0.195",
+    "@vx/curve": "0.0.195",
+    "@vx/grid": "0.0.195",
+    "@vx/group": "0.0.195",
+    "@vx/responsive": "0.0.195",
+    "@vx/scale": "0.0.195",
+    "@vx/shape": "0.0.195",
+    "d3-array": "^2.4.0",
     "d3-fetch": "^1.1.2",
+    "d3-time": "^1.1.0",
+    "d3-time-format": "^2.2.3",
     "query-string": "^6.11.1",
     "react": "16.12.0",
     "react-dom": "16.12.0",
@@ -18,6 +28,7 @@
     "sql.js": "^1.2.1"
   },
   "devDependencies": {
+    "@vx/mock-data": "0.0.195",
     "copy-webpack-plugin": "^5.1.1",
     "gh-pages": "^2.2.0",
     "react-app-rewired": "^2.1.5",
