@@ -1,0 +1,1 @@
+{"version":3,"sources":["styles.css"],"names":[],"mappings":"AAAA,OACE,iBACF,CAEA,MACE,gBACF,CAEA,WACE,kBACF","file":"main.0f147f4b.chunk.css","sourcesContent":["select {\n  margin-right: 10px;\n}\n\nlabel {\n  margin-right: 3px;\n}\n\n.selectors {\n  margin-bottom: 10px;\n}\n"]}
