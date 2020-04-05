@@ -6,18 +6,32 @@ import queryString from "query-string";
 import { Group } from "@vx/group";
 import { Grid } from "@vx/grid";
 import { AxisLeft, AxisBottom } from "@vx/axis";
-import { LinePath, Line } from "@vx/shape";
+import { LinePath, Line, Bar } from "@vx/shape";
 import { curveMonotoneX } from "@vx/curve";
-import { scaleTime, scaleLinear } from "@vx/scale";
+import { scaleTime, scaleLinear, scaleBand, scaleLog } from "@vx/scale";
 import { ParentSize } from "@vx/responsive";
 
 import { extent, max, min } from "d3-array";
 import * as d3Time from "d3-time-format";
+import * as d3Format from "d3-format";
 
 export default class App extends React.Component {
   constructor() {
     super();
-    this.state = { loading: true, db: null, err: null, results: null };
+    this.state = {
+      loading: true,
+      db: null,
+      err: null,
+      results: null,
+      states: [],
+      counties: [],
+      stateValue: "USA (all states)",
+      countyValue: null,
+      dates: [],
+      dateAfter: "all",
+      dateBefore: "all",
+      scale: "linear",
+    };
   }
 
   componentDidMount() {
@@ -26,12 +40,12 @@ export default class App extends React.Component {
     // see ../config-overrides.js
 
     initSqlJs()
-      .then(SQL => {
+      .then((SQL) => {
         this.setState({ db: new SQL.Database() }, () => {
           this.syncData();
         });
       })
-      .catch(err => this.setState({ err }));
+      .catch((err) => this.setState({ err }));
   }
 
   syncData() {
@@ -44,13 +58,13 @@ export default class App extends React.Component {
       .csv(
         "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"
       )
-      .then(data => {
+      .then((data) => {
         let chunk = 100;
         for (let i = 0, j = data.length; i < j; i += chunk) {
           let values = data
             .slice(i, i + chunk)
             .map(
-              d =>
+              (d) =>
                 `("${d.date}","${d.county}","${d.state}",${d.fips || 0},${
                   d.cases
                 },${d.deaths})`
@@ -60,11 +74,45 @@ export default class App extends React.Component {
           let q = `INSERT INTO covid_counties (date, county, state, fips, cases, deaths)\nVALUES\n${strValues};`;
           this.exec(q);
         }
-        this.setState({ loading: false });
-        const parsed = queryString.parse(window.location.search);
-        if (parsed["q"]) {
-          this.exec(parsed["q"]);
+
+        let results = this.state.db.exec(
+          "SELECT DISTINCT state FROM covid_counties ORDER BY state"
+        );
+        let states = results[0].values;
+        results = this.state.db.exec(
+          "SELECT DISTINCT date FROM covid_counties ORDER BY date"
+        );
+        let dates = results[0].values;
+        const p = queryString.parse(window.location.search);
+        console.log(p["json"]);
+        let parsed = p["json"] ? JSON.parse(p["json"]) : {};
+        let counties = [];
+        let stateValue = parsed["state"] || "USA (all states)";
+        if (stateValue !== "USA (all states)") {
+          counties = this.getCounties(stateValue);
         }
+        this.setState(
+          {
+            loading: false,
+            states,
+            dates,
+            stateValue: parsed["state"] || "USA (all states)",
+            countyValue: parsed["county"] || null,
+            dateAfter: parsed["after"] || "all",
+            dateBefore: parsed["before"] || "all",
+            scale: parsed["scale"] || "linear",
+            counties,
+          },
+          () => {
+            this.qFromSelects();
+          }
+        );
+        // const parsed = queryString.parse(window.location.search);
+        // if (parsed["q"]) {
+        //   this.exec(parsed["q"]);
+        // } else {
+
+        // }
       });
   }
 
@@ -94,25 +142,149 @@ export default class App extends React.Component {
     });
   }
 
+  getCounties(state) {
+    let results = this.state.db.exec(
+      `SELECT DISTINCT county FROM covid_counties WHERE state="${state}" ORDER BY county`
+    );
+    return results[0].values;
+  }
+
+  handleStateChange(event) {
+    let counties = [];
+    let value = event.target.value;
+    if (value !== "USA (all states)") {
+      counties = this.getCounties(value);
+    }
+    this.setState(
+      {
+        stateValue: event.target.value,
+        counties,
+        countyValue: "All (entire state)",
+      },
+      () => {
+        this.qFromSelects();
+      }
+    );
+  }
+
+  handleCountyChange(event) {
+    let value = event.target.value;
+    this.setState({ countyValue: event.target.value }, () => {
+      this.qFromSelects();
+    });
+  }
+
+  handleDateAfterChange(event) {
+    this.setState({ dateAfter: event.target.value }, () => {
+      this.qFromSelects();
+    });
+  }
+
+  handleDateBeforeChange(event) {
+    this.setState({ dateBefore: event.target.value }, () => {
+      this.qFromSelects();
+    });
+  }
+
+  handleScaleChange(event) {
+    this.setState({ scale: event.target.value }, () => {
+      this.qFromSelects();
+    });
+  }
+
+  qFromSelects() {
+    let whereClauses = [];
+    if (this.state.stateValue !== "USA (all states)") {
+      whereClauses.push(`state="${this.state.stateValue}" `);
+      if (this.state.countyValue !== "All (entire state)") {
+        whereClauses.push(`county="${this.state.countyValue}"`);
+      }
+    }
+    if (this.state.dateAfter !== "all") {
+      whereClauses.push(`date >= "${this.state.dateAfter}"`);
+    }
+    if (this.state.dateBefore !== "all") {
+      whereClauses.push(`date <= "${this.state.dateBefore}"`);
+    }
+    let whereClause =
+      whereClauses.length > 0 && `WHERE ${whereClauses.join(" AND ")}`;
+    let q = `SELECT date, SUM(cases) AS cases, SUM(deaths) AS deaths FROM covid_counties ${whereClause} GROUP BY (date)`;
+    this.exec(q);
+
+    let enc = encodeURIComponent;
+    let json = JSON.stringify({
+      state: this.state.stateValue,
+      county: this.state.countyValue,
+      after: this.state.dateAfter,
+      before: this.state.dateBefore,
+      scale: this.state.scale,
+    });
+    window.history.replaceState(null, "", `?json=${enc(json)}`);
+  }
+
+  graphSelector() {
+    return (
+      <div class="selectors">
+        <label for="state">State</label>
+        <select
+          name="state"
+          value={this.state.stateValue}
+          onChange={(e) => this.handleStateChange(e)}
+        >
+          <option value="USA (all states)">USA (all states)</option>
+          {this.state.states.map((s) => (
+            <option value={s}>{s}</option>
+          ))}
+        </select>
+        <label for="county">County</label>
+        <select
+          name="county"
+          value={this.state.countyValue}
+          onChange={(e) => this.handleCountyChange(e)}
+        >
+          {this.state.stateValue !== "USA (all states)" && (
+            <option value="All (entire state)">All (entire state)</option>
+          )}
+          {this.state.counties.map((s) => (
+            <option value={s}>{s}</option>
+          ))}
+        </select>
+        <label for="daterange">Date range</label>
+        <select
+          name="daterange"
+          value={this.state.dateAfter}
+          onChange={(e) => this.handleDateAfterChange(e)}
+        >
+          <option value="all"> -- beginning date -- </option>
+          {this.state.dates.map((s) => (
+            <option value={s}>{s}</option>
+          ))}
+        </select>
+        <select
+          value={this.state.dateBefore}
+          onChange={(e) => this.handleDateBeforeChange(e)}
+        >
+          <option value="all"> -- end date -- </option>
+          {this.state.dates.map((s) => (
+            <option value={s}>{s}</option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
   graphData({ columns, values }, width, height) {
-    if (values.length > 10000) {
-      return null;
-    }
-    // console.log(values);
     const xIndex = columns.indexOf("date");
-    if (xIndex === -1) {
-      return <div>Add a `date` and `cases` column to graph the results.</div>;
-    }
     const yIndex = columns.indexOf("cases");
-    if (yIndex === -1) {
-      return <div>Add a `date` and `cases` column to graph the results.</div>;
-    }
+    const yDeathsIndex = columns.indexOf("deaths");
 
     // responsive utils for axis ticks
     function numTicksForHeight(height) {
-      if (height <= 300) return 3;
-      if (300 < height && height <= 600) return 5;
-      return 10;
+      // if (height <= 300) return 3;
+      // if (300 < height && height <= 600) return 5;
+      // return 10;
+
+      return 2;
     }
 
     function numTicksForWidth(width) {
@@ -122,22 +294,33 @@ export default class App extends React.Component {
     }
 
     const parseDate = d3Time.timeParse("%Y-%m-%d");
-    const x = d => parseDate(d[xIndex]);
-    const y = d => d[yIndex];
+    const x = (d) => parseDate(d[xIndex]);
+    const y = (d) => +d[yIndex];
+    const yDeaths = (d) => +d[yDeathsIndex];
+
     // bounds
     const margin = 60;
     const xMax = width - margin - margin;
     const yMax = height - margin - margin;
     // scales
-    console.log(extent(values, x));
     const xScale = scaleTime({
       range: [0, xMax],
-      domain: extent(values, x)
+      domain: extent(values, x),
     });
-    const yScale = scaleLinear({
-      range: [yMax, 0],
-      domain: [0, max(values, y)]
+    const xDeathsScale = scaleBand({
+      range: [0, xMax],
+      domain: values.map(x),
     });
+    const yScale =
+      this.state.scale === "linear"
+        ? scaleLinear({
+            range: [yMax, 0],
+            domain: [0, max(values, y)],
+          })
+        : scaleLog({
+            range: [yMax, 0],
+            domain: extent(values, y),
+          });
     return (
       <svg width={width} height={height}>
         <rect
@@ -156,14 +339,33 @@ export default class App extends React.Component {
           stroke="rgb(102, 102, 102)"
           width={xMax}
           height={yMax}
-          numTicksRows={numTicksForHeight(height)}
+          numTicksRows={4}
           numTicksColumns={numTicksForWidth(width)}
         />
+        <Group top={margin} left={margin} key="deaths">
+          {values.map((d, i) => {
+            const date = x(d);
+            const barWidth = xDeathsScale.bandwidth();
+            const barHeight = yMax - yScale(yDeaths(d));
+            const barX = xDeathsScale(date);
+            const barY = yMax - barHeight;
+            return (
+              <Bar
+                key={`bar-${i}`}
+                x={barX}
+                y={barY}
+                width={barWidth}
+                height={barHeight}
+                fill="rgba(23, 233, 217, .5)"
+              />
+            );
+          })}
+        </Group>
         <Group key={`lines-1`} top={margin} left={margin}>
           <LinePath
             data={values}
-            x={d => xScale(x(d))}
-            y={d => yScale(y(d))}
+            x={(d) => xScale(x(d))}
+            y={(d) => yScale(y(d))}
             stroke={"#ffffff"}
             strokeWidth={2}
             curve={curveMonotoneX}
@@ -175,13 +377,14 @@ export default class App extends React.Component {
             left={0}
             scale={yScale}
             hideZero
-            numTicks={numTicksForHeight(height)}
+            numTicks={4}
             label="Cases"
+            tickFormat={d3Format.format("~s")}
             labelProps={{
               fill: "#FFF",
               textAnchor: "middle",
               fontSize: 12,
-              fontFamily: "Arial"
+              fontFamily: "Arial",
             }}
             stroke="#FFF"
             tickStroke="#FFF"
@@ -191,7 +394,7 @@ export default class App extends React.Component {
               fontSize: 10,
               fontFamily: "Arial",
               dx: "-0.25em",
-              dy: "0.25em"
+              dy: "0.25em",
             })}
             tickComponent={({ formattedValue, ...tickProps }) => (
               <text {...tickProps}>{formattedValue}</text>
@@ -204,7 +407,7 @@ export default class App extends React.Component {
             numTicks={numTicksForWidth(width)}
             label="Date"
           >
-            {axis => {
+            {(axis) => {
               const tickLabelSize = 10;
               const tickRotate = 45;
               const tickColor = "#FFF";
@@ -240,6 +443,7 @@ export default class App extends React.Component {
                     textAnchor="middle"
                     transform={`translate(${axisCenter}, 50)`}
                     fontSize="8"
+                    fill="#FFF"
                   >
                     {axis.label}
                   </text>
@@ -270,7 +474,7 @@ export default class App extends React.Component {
         <table>
           <thead>
             <tr>
-              {columns.map(columnName => (
+              {columns.map((columnName) => (
                 <td>{columnName}</td>
               ))}
             </tr>
@@ -281,7 +485,7 @@ export default class App extends React.Component {
               row // values is an array of arrays representing the results of the query
             ) => (
               <tr>
-                {row.map(value => (
+                {row.map((value) => (
                   <td>{value}</td>
                 ))}
               </tr>
@@ -298,27 +502,36 @@ export default class App extends React.Component {
     if (loading) return <pre>Loading...</pre>;
     return (
       <div className="App">
-        <textarea
+        {/* <textarea
           rows={3}
           defaultValue={parsed["q"]}
           onChange={e => this.inputDebounce(e.target.value, true)}
           placeholder="Enter some SQL. Try “SELECT * FROM covid_counties;”"
-        ></textarea>
-
+        ></textarea> */}
         <pre className="error">{(err || "").toString()}</pre>
+        {this.graphSelector()}
         {results && (
           <ParentSize className="graph-container">
             {({ width: w, height: h }) => {
-              return results.map(d => this.graphData(d, w, 500));
+              return results.map((d) => this.graphData(d, w, 500));
             }}
           </ParentSize>
         )}
+        <label for="scale">Scale</label>
+        <select
+          name="scale"
+          value={this.state.scale}
+          onChange={(e) => this.handleScaleChange(e)}
+        >
+          <option value="linear">linear</option>
+          <option value="log">log</option>
+        </select>
 
-        <pre>
+        {/* <pre>
           {results
             ? results.map(this.renderResult) // results contains one object per select statement in the query
             : ""}
-        </pre>
+        </pre> */}
       </div>
     );
   }
